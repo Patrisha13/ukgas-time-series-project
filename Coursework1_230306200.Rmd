@@ -1,0 +1,220 @@
+---
+title: "Time Series Analysis of UK Gas Consumption Data"
+subtitle: "MTH6139 Coursework 1"
+author: "Patrisha Colaco"
+date: "Spring term 2026"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: spacelab
+    highlight: tango
+---
+
+```{r, echo=FALSE}
+# This code will display the QMUL logo at the top right of the page
+# Do not change this code
+htmltools::img(src = knitr::image_uri("images/QMlogo.png"),
+               alt = 'logo',
+               style = 'position:absolute; top:0; right:0; padding:10px; width:20%;')
+```
+
+<style>
+body {
+  background-color: #fff9cc;
+}
+
+.main-container {
+  padding-right: 180px;
+}
+</style>
+
+# Introduction
+
+This project analyses a time series using Meta's Prophet forecasting system in R.  
+The objective is to examine patterns in UK gas consumption and generate forecasts for future periods.
+A time series is a sequence of observations recorded over time, usually at regular intervals such as days, months or years.
+Time series analysis focuses on identifying patterns in this data, such as long-term trends, seasonal cycles and random fluctuations. Understanding these patterns can help build models that forecast future values of the series.
+
+Time series forecasting is useful for identifying long-term trends and seasonal behaviour in data.  
+Energy consumption data often displays strong seasonal patterns because demand changes throughout the year.
+
+Prophet is particularly well suited to this type of data because it models time series as a combination of **trend, seasonal effects and irregular variation**.  
+More information about the Prophet forecasting system can be found on the [official Prophet website](https://facebook.github.io/prophet/).
+
+This makes it effective for forecasting datasets that contain both long-term growth and repeating seasonal cycles.
+
+
+# The Data
+
+In this project I use the built-in `UKgas` dataset in R. This dataset records quarterly UK gas consumption. It provides a useful example for time series analysis because it displays both a long-term trend and seasonal variation.
+
+Exploratory analysis of the time series helps identify key features such as trend and seasonality.
+
+```{r echo=FALSE}
+plot(UKgas,
+     main="UK Gas Consumption",
+     ylab="Gas Consumption",
+     xlab="Year")
+```
+
+The plot shows a clear upward trend in gas consumption over time. This suggests that gas consumption increased steadily during the period covered by the dataset.
+
+In addition to the long-term increase, the data also shows a repeating pattern that occurs every four quarters. This indicates the presence of **seasonality**, meaning that consumption rises and falls in a consistent way each year.
+
+Such seasonal behaviour is common in energy consumption data, as gas demand tends to increase during colder months when heating usage is higher.
+
+# Seasonal Pattern
+
+```{r echo=FALSE}
+monthplot(UKgas,
+          main="Seasonal Pattern of UK Gas Consumption")
+```
+
+The seasonal plot shows how gas consumption varies across the four quarters of each year.
+
+The plot indicates that some quarters consistently show higher consumption than others. Gas usage tends to increase during colder periods and decrease during warmer periods, reflecting the seasonal demand for heating.
+
+This confirms that the time series contains a strong seasonal component.
+
+# Preparing the Data for Prophet
+
+Prophet requires the data to be stored in a data frame with two columns named `ds` and `y`. The `ds` column contains the dates and the `y` column contains the observed values of the time series.
+
+```{r echo=FALSE,message=FALSE}
+library(zoo)
+
+ukgas_dates <- as.Date(as.yearqtr(time(UKgas)))
+ukgas_values <- as.numeric(UKgas)
+
+ukgas_dataframe <- data.frame(
+  ds = ukgas_dates,
+  y = ukgas_values
+)
+```
+
+# Fitting the Prophet Model
+
+The next step is to fit the Prophet forecasting model to the prepared dataset.
+
+```{r echo=FALSE, message=FALSE}
+library(prophet)
+
+ukgas_prophet_model <- prophet(ukgas_dataframe)
+
+future_dates <- make_future_dataframe(
+  ukgas_prophet_model,
+  periods = 8,
+  freq = "quarter"
+)
+```
+
+The `make_future_dataframe()` function extends the dataset into the future by generating additional time periods. In this project the series is extended by **8 quarters**, allowing the model to forecast gas consumption for the next two years.
+
+# Generating the Forecast
+
+```{r echo=FALSE}
+ukgas_forecast <- predict(ukgas_prophet_model, future_dates)
+```
+
+The `predict()` function uses the fitted Prophet model to generate forecasts for all time periods in the dataset, including the newly created future dates.
+
+# Forecast Plot
+
+```{r echo=FALSE}
+plot(ukgas_prophet_model, ukgas_forecast)
+```
+
+The forecast plot displays the historical observations together with the predicted future values produced by the Prophet model.
+
+The forecast follows the upward trend observed in the original data and projects this pattern into the future. Seasonal fluctuations remain visible in the forecast, indicating that the model expects gas consumption to continue following a repeating yearly cycle.
+
+The shaded regions around the forecast represent the uncertainty intervals, which show the range within which future values are likely to fall.
+
+# Forecast Components
+
+```{r echo=FALSE, warning=FALSE}
+prophet_plot_components(ukgas_prophet_model, ukgas_forecast)
+```
+
+The component plots separate the forecast into its main elements: the **trend** and the **seasonal effects**.
+
+The trend component illustrates the long-term increase in gas consumption over time. This confirms the gradual growth already observed in the time series plot.
+
+The seasonal component shows how gas consumption changes throughout the year. Higher consumption occurs during colder periods when heating demand increases, while lower consumption occurs during warmer months.
+
+This repeating pattern demonstrates that seasonality plays an important role in explaining variations in gas usage.
+
+# Residual Analysis
+
+To evaluate how well the Prophet model fits the data, the residuals can be examined. Residuals represent the difference between the observed values and the values predicted by the model.
+
+```{r echo=FALSE}
+residuals <- ukgas_dataframe$y - ukgas_forecast$yhat[1:length(ukgas_dataframe$y)]
+
+plot(residuals,
+     type="l",
+     main="Residuals from Prophet Model",
+     ylab="Residual",
+     xlab="Time")
+
+abline(h=0, col="red")
+```
+
+If the model captures the main structure of the time series, the residuals should fluctuate randomly around zero without displaying any systematic pattern. A random distribution of residuals suggests that the model has successfully accounted for the main trend and seasonal components in the data.
+
+# Comparison with a Simpler Prophet Model
+
+To investigate the importance of seasonal effects, a second Prophet model can be fitted with the seasonal component removed.
+
+```{r echo=FALSE, message=FALSE}
+ukgas_model_no_season <- prophet(
+  ukgas_dataframe,
+  yearly.seasonality = FALSE
+)
+
+ukgas_forecast_no_season <- predict(
+  ukgas_model_no_season,
+  future_dates
+)
+
+plot(ukgas_model_no_season,
+     ukgas_forecast_no_season)
+```
+
+This alternative model focuses primarily on the long-term trend in the data. Comparing this forecast with the full Prophet model demonstrates that seasonal effects are essential for accurately representing the fluctuations observed in UK gas consumption.
+
+The full model provides a better representation of the repeating patterns in the data.
+
+# Additional Analysis: Linear Trend Model
+
+To further investigate the long-term increase in gas consumption, a simple linear regression model can be fitted.
+
+```{r echo=FALSE}
+time_index <- 1:length(ukgas_dataframe$y)
+
+trend_model <- lm(
+  y ~ time_index,
+  data = ukgas_dataframe
+)
+
+summary(trend_model)
+```
+
+The regression results confirm that the series has a strong positive trend over time. The estimated coefficient for the time variable is positive, indicating that gas consumption increases as time progresses. The very small p-value suggests that this trend is statistically significant.
+
+This finding supports the upward movement observed in both the time series plot and the Prophet forecast.
+
+# Conclusion
+
+This project analysed the `UKgas` time series using Meta's Prophet forecasting framework.
+
+The analysis identified two key characteristics of the data: a strong long-term upward trend and clear seasonal variation across the four quarters of each year.
+
+The Prophet model successfully captured both of these features and produced forecasts that extend these patterns into future periods.
+
+A comparison with a simplified model without seasonal effects demonstrated that seasonal behaviour plays an important role in explaining variations in gas consumption.
+
+Finally, a linear regression analysis confirmed the presence of a statistically significant upward trend in the series.
+
+Overall, this analysis demonstrates how time series forecasting techniques such as Prophet can effectively model and predict real-world datasets that contain both trend and seasonal components.
